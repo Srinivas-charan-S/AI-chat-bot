@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 const ENV = z.object({
   SLACK_BOT_TOKEN: z.string(),
   SLACK_SIGNING_SECRET: z.string(),
-  OPENAI_API_KEY: z.string(),
+  GROQ_API_KEY: z.string(),
   CONFLUENCE_BASE_URL: z.string().url(),
   CONFLUENCE_EMAIL: z.string(),
   CONFLUENCE_API_TOKEN: z.string(),
@@ -63,12 +63,12 @@ async function askWithConfluenceContext(question: string) {
       pageContent = JSON.parse(pageText);
     }
 
-    const openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY });
+    const openai = new OpenAI({ apiKey: ENV.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1' });
     const system = `You are a helpful assistant answering questions using Confluence context. If context is missing, say you don't know.`;
     const contextText = pageContent ? JSON.stringify(pageContent).slice(0, 12000) : 'No relevant page found.';
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'llama-3.1-70b-versatile',
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: `Question: ${question}\n\nConfluence context (JSON storage excerpt):\n${contextText}` },
