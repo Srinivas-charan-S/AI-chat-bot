@@ -41,32 +41,54 @@ async function askWithConfluenceContext(question: string) {
     const listTools = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema);
     void listTools;
 
-    const search = await client.request(
-      { method: 'tools/call', params: { name: 'confluence.search', arguments: { query: question } } },
-      CallToolResultSchema
-    );
-    const resultsJsonText = (search as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
-    const results = JSON.parse(resultsJsonText);
-
-    let topPageId: string | undefined;
-    if (Array.isArray(results?.results) && results.results.length > 0) {
-      topPageId = results.results[0]?.content?._id || results.results[0]?.id || results.results[0]?.content?.id;
-    }
-
-    let pageContent: any | undefined;
-    if (topPageId) {
-      const page = await client.request(
-        { method: 'tools/call', params: { name: 'confluence.getPage', arguments: { id: String(topPageId) } } },
+    // Parallel search across Confluence, SharePoint, and Quip
+    const [confluenceSearch, sharepointSearch, quipSearch] = await Promise.all([
+      client.request(
+        { method: 'tools/call', params: { name: 'confluence.search', arguments: { query: question } } },
         CallToolResultSchema
-      );
-      const pageText = (page as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
-      pageContent = JSON.parse(pageText);
+      ),
+      client.request(
+        { method: 'tools/call', params: { name: 'sharepoint.search', arguments: { query: question } } },
+        CallToolResultSchema
+      ).catch(err => ({ content: [{ type: 'text', text: `sharepoint error: ${err?.message || String(err)}` }] })),
+      client.request(
+        { method: 'tools/call', params: { name: 'quip.search', arguments: { query: question } } },
+        CallToolResultSchema
+      ).catch(err => ({ content: [{ type: 'text', text: `quip error: ${err?.message || String(err)}` }] })),
+    ]);
+
+    const confluenceText = (confluenceSearch as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
+    const sharepointText = (sharepointSearch as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
+    const quipText = (quipSearch as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
+
+    const confluence = safeJson(confluenceText);
+    const sharepoint = safeJson(sharepointText);
+    const quip = safeJson(quipText);
+
+    // Confluence: fetch top page for richer context
+    let pageContent: any | undefined;
+    if (Array.isArray(confluence?.results) && confluence.results.length > 0) {
+      const topPageId = confluence.results[0]?.content?._id || confluence.results[0]?.id || confluence.results[0]?.content?.id;
+      if (topPageId) {
+        const page = await client.request(
+          { method: 'tools/call', params: { name: 'confluence.getPage', arguments: { id: String(topPageId) } } },
+          CallToolResultSchema
+        );
+        const pageText = (page as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
+        pageContent = safeJson(pageText);
+      }
     }
 
     const genAI = new GoogleGenerativeAI(ENV.GOOGLE_GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const system = `You are a helpful assistant answering questions using enterprise docs. If context is missing, say you don't know.`;
-    const contextText = pageContent ? JSON.stringify(pageContent).slice(0, 12000) : 'No relevant page found.';
+    const aggregated = {
+      confluenceTopPage: pageContent ?? null,
+      confluenceSearch: confluence,
+      sharepointSearch: sharepoint,
+      quipSearch: quip,
+    };
+    const contextText = JSON.stringify(aggregated).slice(0, 12000);
 
     const response = await model.generateContent({
       contents: [
@@ -78,6 +100,10 @@ async function askWithConfluenceContext(question: string) {
   } finally {
     await transport.close();
   }
+}
+
+function safeJson(text: string) {
+  try { return JSON.parse(text); } catch { return { raw: text }; }
 }
 
 const app = new App({

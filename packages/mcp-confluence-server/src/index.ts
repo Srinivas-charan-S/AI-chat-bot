@@ -70,6 +70,26 @@ function extractQuipThreadId(idOrUrl: string): string {
   }
 }
 
+async function quipSearch(query: string) {
+  if (!OPTIONAL.QUIP_API_TOKEN) {
+    throw new Error('QUIP_API_TOKEN is not set');
+  }
+  const url = new URL('https://platform.quip.com/1/search/threads');
+  url.searchParams.set('query', query);
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${OPTIONAL.QUIP_API_TOKEN}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Quip search failed ${res.status}: ${text}`);
+  }
+  return await res.json();
+}
+
 async function quipGetThread(idOrUrl: string) {
   if (!OPTIONAL.QUIP_API_TOKEN) {
     throw new Error('QUIP_API_TOKEN is not set');
@@ -157,6 +177,17 @@ mcpServer.tool('confluence.getPage', {
 }, async ({ id }) => {
   const data = await confluenceGetPageContent(id);
   return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+});
+
+mcpServer.tool('quip.search', {
+  query: z.string().describe('Search Quip threads'),
+}, async ({ query }) => {
+  try {
+    const data = await quipSearch(query);
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  } catch (err: any) {
+    return { content: [{ type: 'text', text: err?.message || String(err) }], isError: true };
+  }
 });
 
 mcpServer.tool('quip.getThread', {
