@@ -4,12 +4,12 @@ import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ListToolsResultSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const ENV = z.object({
   SLACK_BOT_TOKEN: z.string(),
   SLACK_SIGNING_SECRET: z.string(),
-  GROQ_API_KEY: z.string(),
+  GOOGLE_GEMINI_API_KEY: z.string(),
   CONFLUENCE_BASE_URL: z.string().url(),
   CONFLUENCE_EMAIL: z.string(),
   CONFLUENCE_API_TOKEN: z.string(),
@@ -63,20 +63,18 @@ async function askWithConfluenceContext(question: string) {
       pageContent = JSON.parse(pageText);
     }
 
-    const openai = new OpenAI({ apiKey: ENV.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1' });
-    const system = `You are a helpful assistant answering questions using Confluence context. If context is missing, say you don't know.`;
+    const genAI = new GoogleGenerativeAI(ENV.GOOGLE_GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const system = `You are a helpful assistant answering questions using enterprise docs. If context is missing, say you don't know.`;
     const contextText = pageContent ? JSON.stringify(pageContent).slice(0, 12000) : 'No relevant page found.';
 
-    const completion = await openai.chat.completions.create({
-      model: 'llama-3.1-70b-versatile',
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: `Question: ${question}\n\nConfluence context (JSON storage excerpt):\n${contextText}` },
+    const response = await model.generateContent({
+      contents: [
+        { role: 'user', parts: [{ text: `${system}\n\nQuestion: ${question}\n\nContext (JSON excerpt):\n${contextText}` }] }
       ],
-      temperature: 0.2,
+      generationConfig: { temperature: 0.2 }
     });
-
-    return completion.choices[0]?.message?.content || 'No answer generated.';
+    return response.response.text() || 'No answer generated.';
   } finally {
     await transport.close();
   }

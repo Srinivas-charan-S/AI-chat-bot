@@ -11,10 +11,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@modelcontextprotocol/sdk": "^1.20.2",
     "@slack/bolt": "^4.5.0",
     "dotenv": "^16.4.5",
-    "openai": "^6.7.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
