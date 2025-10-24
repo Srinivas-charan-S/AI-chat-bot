@@ -1,0 +1,26 @@
+{
+  "name": "workspace",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Slack AI bot + Confluence MCP monorepo",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm -ws run build",
+    "dev": "npm -ws run dev",
+    "clean": "rimraf packages/*/dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Srinivas-charan-S/AI-chat-bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Srinivas-charan-S/AI-chat-bot/issues"
+  },
+  "homepage": "https://github.com/Srinivas-charan-S/AI-chat-bot#readme"
+}
