@@ -3,8 +3,7 @@ import { App } from '@slack/bolt';
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { execFile } from 'node:child_process';
-import { once } from 'node:events';
+import { ListToolsResultSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import OpenAI from 'openai';
 
 const ENV = z.object({
@@ -17,32 +16,37 @@ const ENV = z.object({
 }).parse(process.env);
 
 async function createMcpClient() {
-  const child = execFile(
-    process.execPath,
-    ['--loader', 'tsx', '-r', 'dotenv/config', './packages/mcp-confluence-server/src/index.ts'],
-    {
-      env: process.env,
-      cwd: process.cwd(),
-    }
-  );
-
-  await once(child, 'spawn');
+  // Build safe env (string-only) for child process
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([, v]) => typeof v === 'string') as Array<[string, string]>
+  ) as Record<string, string>;
 
   const transport = new StdioClientTransport({
-    readable: child.stdout!,
-    writable: child.stdin!,
+    command: process.execPath,
+    args: ['--loader', 'tsx', '-r', 'dotenv/config', './packages/mcp-confluence-server/src/index.ts'],
+    env,
+    cwd: process.cwd(),
+    stderr: 'inherit' as any,
   });
+  await transport.start();
 
-  const client = new Client({ name: 'slack-bot', version: '0.1.0' }, { capabilities: {} });
+  const client = new Client({ name: 'slack-bot', version: '0.1.0' });
   await client.connect(transport);
-  return { client, child };
+  return { client, transport };
 }
 
 async function askWithConfluenceContext(question: string) {
-  const { client, child } = await createMcpClient();
+  const { client, transport } = await createMcpClient();
   try {
-    const search = await client.callTool({ name: 'confluence.search', arguments: { query: question } });
-    const results = (search.content?.[0] as any)?.json;
+    const listTools = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema);
+    void listTools;
+
+    const search = await client.request(
+      { method: 'tools/call', params: { name: 'confluence.search', arguments: { query: question } } },
+      CallToolResultSchema
+    );
+    const resultsJsonText = (search as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
+    const results = JSON.parse(resultsJsonText);
 
     let topPageId: string | undefined;
     if (Array.isArray(results?.results) && results.results.length > 0) {
@@ -51,8 +55,12 @@ async function askWithConfluenceContext(question: string) {
 
     let pageContent: any | undefined;
     if (topPageId) {
-      const page = await client.callTool({ name: 'confluence.getPage', arguments: { id: String(topPageId) } });
-      pageContent = (page.content?.[0] as any)?.json;
+      const page = await client.request(
+        { method: 'tools/call', params: { name: 'confluence.getPage', arguments: { id: String(topPageId) } } },
+        CallToolResultSchema
+      );
+      const pageText = (page as any).content?.find((c: any) => c.type === 'text')?.text || '{}';
+      pageContent = JSON.parse(pageText);
     }
 
     const openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY });
@@ -70,7 +78,7 @@ async function askWithConfluenceContext(question: string) {
 
     return completion.choices[0]?.message?.content || 'No answer generated.';
   } finally {
-    child.kill();
+    await transport.close();
   }
 }
 

@@ -22,5 +22,8 @@
   "bugs": {
     "url": "https://github.com/Srinivas-charan-S/AI-chat-bot/issues"
   },
-  "homepage": "https://github.com/Srinivas-charan-S/AI-chat-bot#readme"
+  "homepage": "https://github.com/Srinivas-charan-S/AI-chat-bot#readme",
+  "devDependencies": {
+    "rimraf": "^6.0.1"
+  }
 }
