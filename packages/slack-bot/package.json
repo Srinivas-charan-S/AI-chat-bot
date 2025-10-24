@@ -6,15 +6,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.6.2",
-    "@slack/bolt": "^3.19.0",
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "@slack/bolt": "^4.5.0",
     "dotenv": "^16.4.5",
-    "openai": "^4.60.0",
+    "openai": "^6.7.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -19,7 +19,7 @@ const ENV = z.object({
 async function createMcpClient() {
   const child = execFile(
     process.execPath,
-    ['-r', 'dotenv/config', './packages/mcp-confluence-server/src/index.ts'],
+    ['--loader', 'tsx', '-r', 'dotenv/config', './packages/mcp-confluence-server/src/index.ts'],
     {
       env: process.env,
       cwd: process.cwd(),
